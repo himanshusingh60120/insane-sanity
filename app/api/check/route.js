@@ -8,11 +8,20 @@ import { writeRun } from '../../../lib/sheets.js';
 import { itemsForPageType } from '../../../lib/checklist.js';
 
 export const runtime = 'nodejs';
-export const maxDuration = 120;
+export const maxDuration = 90;
 export const dynamic = 'force-dynamic';
 
 export async function POST(request) {
   const started = Date.now();
+  const timings = {};
+  const stage = async (name, fn) => {
+    const t = Date.now();
+    try {
+      return await fn();
+    } finally {
+      timings[name] = Date.now() - t;
+    }
+  };
 
   const token = process.env.KR_ACCESS_TOKEN;
   if (token && request.headers.get('x-kr-token') !== token) {
@@ -49,7 +58,7 @@ export async function POST(request) {
 
   let page;
   try {
-    page = await fetchPage(url);
+    page = await stage('fetch', () => fetchPage(url));
   } catch (err) {
     return NextResponse.json(
       { error: `Could not load the page: ${err.message || err}` },
@@ -57,36 +66,52 @@ export async function POST(request) {
     );
   }
 
-  const doc = parsePage({
-    url: page.url,
-    html: page.html,
-    css: page.css,
-    status: page.status,
-    ttfbMs: page.ttfbMs,
-  });
+  const doc = await stage('parse', async () =>
+    parsePage({
+      url: page.url,
+      html: page.html,
+      css: page.css,
+      status: page.status,
+      ttfbMs: page.ttfbMs,
+    })
+  );
 
   // Sitemap membership and the recent-report baseline run together.
-  const [sitemapUrls, baseline] = await Promise.all([
+  const [sitemapUrls, baseline] = await stage('sitemap+baseline', () => Promise.all([
     fetchSitemapUrls(process.env.SITEMAP_URL || `${siteOrigin}/sitemap-reports.xml`),
     useBaseline
       ? buildBaseline({ limit: Number(baselineSize) || 4, excludeUrl: url }).catch(() => null)
       : Promise.resolve(null),
-  ]);
+  ]));
 
+  // Capped so a slow model cannot eat the whole invocation. Everything else in
+  // the run is deterministic and matters more than three advisory rows.
   const ai = useAi
-    ? await runAiPass({
-        text: doc.rawText,
-        apiKey: process.env.OPENAI_API_KEY,
-        model: process.env.OPENAI_MODEL,
-      })
+    ? await stage('ai', () =>
+        Promise.race([
+          runAiPass({
+            text: doc.rawText,
+            apiKey: process.env.OPENAI_API_KEY,
+            model: process.env.OPENAI_MODEL,
+          }),
+          new Promise((resolve) =>
+            setTimeout(
+              () => resolve({ available: false, findings: [], discarded: 0, reason: 'copy-edit pass timed out after 25s' }),
+              25000
+            )
+          ),
+        ])
+      )
     : { available: false, findings: [], discarded: 0, reason: 'AI pass switched off for this run' };
 
-  const { issues, info, verdicts, probes } = await runAllRules(doc, {
-    sitemapUrls,
-    baseline,
-    aiAvailable: ai.available,
-    aiIssues: aiFindingsToIssues(ai),
-  });
+  const { issues, info, verdicts, probes } = await stage('rules', () =>
+    runAllRules(doc, {
+      sitemapUrls,
+      baseline,
+      aiAvailable: ai.available,
+      aiIssues: aiFindingsToIssues(ai),
+    })
+  );
 
   const items = itemsForPageType(doc.pageType);
   const passed = items.filter((i) => verdicts[i.key]?.value === 'Yes').length;
@@ -108,7 +133,7 @@ export async function POST(request) {
   let sheet = { written: false, reason: 'Sheet writing switched off for this run' };
   if (writeToSheet) {
     try {
-      sheet = await writeRun({ doc, verdicts, issues, runId, checkedBy, summary });
+      sheet = await stage('sheet', () => writeRun({ doc, verdicts, issues, runId, checkedBy, summary }));
     } catch (err) {
       sheet = { written: false, reason: `Sheet write failed: ${err.message || err}` };
     }
@@ -119,6 +144,7 @@ export async function POST(request) {
     url: doc.url,
     checkedAt: new Date().toISOString(),
     elapsedMs: Date.now() - started,
+    timings,
     page: {
       status: doc.status,
       ttfbMs: doc.ttfbMs,
