@@ -13,6 +13,8 @@
 import { parsePage } from '../lib/parse.js';
 import casingRules from '../lib/rules/casing.js';
 import structureRules from '../lib/rules/structure.js';
+import technicalRules from '../lib/rules/technical.js';
+import typographyRules from '../lib/rules/typography.js';
 
 const CSS = `
   .sticky-title { text-transform: uppercase; letter-spacing: .04em; }
@@ -71,6 +73,12 @@ const HTML = `<!doctype html>
     <h3 class="sticky-title">Regulatory Frameworks</h3>
     <ul><li>The U.S. Consumer Product Safety Commission governs widget labelling requirements.</li></ul>
 
+    <p>…the purity and stability of the product are valued.&nbsp;</p>
+    <p>Furthermore, the regional market benefits from continuous product development.</p>
+    <p>A sentence with a genuine  double space inside it.</p>
+    <p style="font-size:11.0pt;font-family:Calibri,sans-serif">Pasted straight out of Word.</p>
+    <p class="MsoNormal">Another paste artifact.</p>
+
     <h2>Competitive Landscape</h2>
     <p>The market remains moderately consolidated, with several mid-sized manufacturers expanding capacity.</p>
     <h3>Key Companies In The U.S. Widget Market</h3>
@@ -103,7 +111,12 @@ console.log('Tables:      ', doc.tables.length, '· header cells:', JSON.stringi
 console.log('Subtitle raw double space:', /\S {2}\S/.test(doc.subtitleRaw));
 console.log('CSS-uppercased headings:  ', doc.headings.filter((h) => h.cssUppercase).length);
 
-const issues = [...casingRules(doc), ...structureRules(doc)].filter((i) => i.severity !== 'info');
+const issues = [
+  ...casingRules(doc),
+  ...structureRules(doc),
+  ...technicalRules(doc, { sitemapUrls: [] }),
+  ...typographyRules(doc),
+].filter((i) => i.severity !== 'info');
 
 console.log('\n── Findings ───────────────────────────────────────────────');
 for (const i of issues) {
@@ -120,10 +133,29 @@ const need = [
   ['STRUCT-08', '"By Region" on a country report'],
   ['STRUCT-10', 'mixed bold segmentation bullets'],
   ['CASE-02', 'heading uppercased by CSS, not by content'],
+  ['TECH-06', 'genuine double space inside one sentence'],
+  ['TECH-15', 'trailing non-breaking space from a Word paste'],
+  ['TYPO-01', 'inline font-size / font-family on body copy'],
+  ['TYPO-04', 'MsoNormal paste-artifact class'],
 ];
 const missing = need.filter(([r]) => !fired.has(r));
 
+// The regression that matters most: a paragraph boundary must never read as a
+// double space. Two blocks, the first ending in &nbsp;, flatten into a string
+// containing two spaces that exist nowhere in the copy.
+const tech06 = issues.filter((i) => i.ruleId === 'TECH-06');
+const falsePositive = tech06.some((i) => /are valued/.test(String(i.found)));
+
+console.log('\n── Whitespace regression ──────────────────────────────────');
+console.log('TECH-06 findings:', tech06.length);
+for (const i of tech06) console.log('   ', String(i.found).replace(/\n/g, ' | '));
+console.log('flags the paragraph boundary (must be false):', falsePositive);
+
 console.log('\n── Result ─────────────────────────────────────────────────');
+if (falsePositive) {
+  console.error('FAIL — TECH-06 still reads a paragraph boundary as a double space.');
+  process.exit(1);
+}
 if (missing.length) {
   console.error('FAIL — not caught:', missing.map(([r, d]) => `${r} (${d})`).join(', '));
   process.exit(1);
