@@ -128,12 +128,13 @@ const fired = new Set(issues.map((i) => i.ruleId));
 
 // Observations must never reach the issue stream — they are not defects and a
 // QA tool that reports them as such is inventing work.
-const mustBeSilent = ['TECH-15', 'LINK-01'];
+// Title Case with capitalised minor words is house style. Only a heading that
+// is entirely shouting is a defect, and that is CASE-01's job.
+const mustBeSilent = ['TECH-15', 'LINK-01', 'CASE-04', 'CASE-05'];
 const noisy = mustBeSilent.filter((r) => fired.has(r));
 const need = [
   ['CASE-01', 'ALL CAPS H3 in the source'],
   ['CASE-03', 'ALL CAPS table header cells'],
-  ['CASE-04', '"Key Companies In The" minor words'],
   ['CASE-08', '"in U.S.?" missing the article'],
   ['STRUCT-08', '"By Region" on a country report'],
   ['STRUCT-10', 'mixed bold segmentation bullets'],
