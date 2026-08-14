@@ -1,0 +1,22 @@
+{
+  "name": "kr-sanity-checker",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Editorial sanity checker for Kings Research report pages",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "cheerio": "1.0.0",
+    "googleapis": "144.0.0",
+    "next": "14.2.15",
+    "react": "18.3.1",
+    "react-dom": "18.3.1"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
