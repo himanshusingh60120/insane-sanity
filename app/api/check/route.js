@@ -145,7 +145,15 @@ export async function POST(request) {
     verdicts,
     issues,
     info,
-    ai: { available: ai.available, proposed: ai.proposed ?? 0, verified: ai.findings.length, discarded: ai.discarded, reason: ai.reason || null, model: ai.model || null },
+    ai: {
+      available: ai.available,
+      proposed: ai.proposed ?? 0,
+      verified: ai.findings.length,
+      discarded: ai.discarded,
+      discardedReasons: ai.discardedReasons || [],
+      reason: ai.reason || null,
+      model: ai.model || null,
+    },
     baseline: baseline
       ? { compared: baseline.reports?.length || 0, reports: (baseline.reports || []).map((r) => ({ url: r.url, id: r.id, template: r.template })) }
       : null,
