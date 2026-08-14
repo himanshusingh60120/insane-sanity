@@ -30,8 +30,26 @@ export default function Page() {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ url: url.trim(), checkedBy, writeToSheet, useAi, useBaseline }),
       });
-      const data = await res.json();
-      if (!res.ok) {
+      // A gateway timeout returns an HTML error page, not JSON. Parsing it blind
+      // produced "Unexpected token 'A'", which says nothing about what actually
+      // went wrong. Read the body as text first and report the real cause.
+      const body = await res.text();
+      let data = null;
+      try {
+        data = JSON.parse(body);
+      } catch {
+        /* not JSON — handled below */
+      }
+
+      if (!data) {
+        if (res.status === 504) {
+          setError(
+            'The check ran past the 90-second function limit and Vercel cut it off. Untick “Compare against the last 4 published reports” and try again — that step fetches four more pages.'
+          );
+        } else {
+          setError(`The server returned ${res.status} and not JSON: ${body.slice(0, 140)}`);
+        }
+      } else if (!res.ok) {
         setError(data.error || `The check failed with status ${res.status}.`);
       } else {
         setResult(data);
@@ -143,6 +161,15 @@ export default function Page() {
             <span><b>Words</b> {result.page.wordCount}</span>
             <span><b>Links checked</b> {result.probes.links}</span>
             <span><b>Images checked</b> {result.probes.images}</span>
+            {result.timings ? (
+              <span>
+                <b>Time</b>{' '}
+                {Object.entries(result.timings)
+                  .sort((a, b) => b[1] - a[1])
+                  .map(([k, v]) => `${k} ${(v / 1000).toFixed(1)}s`)
+                  .join(' · ')}
+              </span>
+            ) : null}
           </div>
 
           <div className={`strip ${result.sheet.written ? '' : 'bad'}`}>
