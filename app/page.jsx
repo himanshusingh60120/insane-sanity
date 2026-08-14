@@ -169,8 +169,13 @@ export default function Page() {
               {result.ai.available ? (
                 <span>
                   Copy-edit pass: {result.ai.verified} finding{result.ai.verified === 1 ? '' : 's'} kept,{' '}
-                  {result.ai.discarded} discarded for not matching the page text verbatim
+                  {result.ai.discarded} rejected by the verification guards
                   {result.ai.model ? ` · ${result.ai.model}` : ''}.
+                  {result.ai.discardedReasons?.length ? (
+                    <em style={{ display: 'block', fontStyle: 'normal', color: 'var(--ink-3)', fontSize: 12, marginTop: 4 }}>
+                      {result.ai.discardedReasons.slice(0, 3).join(' · ')}
+                    </em>
+                  ) : null}
                 </span>
               ) : (
                 <span>Copy-edit pass did not run — {result.ai.reason}. Spelling, grammar and tone show as “Not run”.</span>
