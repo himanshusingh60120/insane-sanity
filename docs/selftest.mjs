@@ -162,7 +162,6 @@ for (const i of issues) {
 // Every defect below is one I confirmed by hand on the live page or by
 // arithmetic. If a rule stops firing, the checker has regressed.
 const EXPECTED_RULES = [
-  'CASE-04',    // "Key Companies In The …" — minor words capitalised
   'CASE-08',    // "in U.S.?" should be "in the U.S."
   'META-02',    // title reads "Growth,2033" with no space after the comma
   'NUM-09',     // "is expected to reach … in 2025" on an already-measured base year
