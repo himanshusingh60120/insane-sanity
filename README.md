@@ -201,7 +201,24 @@ POST /api/check
 { "url": "...", "checkedBy": "", "writeToSheet": true, "useAi": true, "useBaseline": true }
 ```
 
-Returns the parsed page summary, per-item verdicts, the full issue list, AI kept/discarded counts, and the sheet write result. A run takes 20–40 seconds, most of it link and image probing; `maxDuration` is set to 120s, which needs a Vercel plan above Hobby.
+Returns the parsed page summary, per-item verdicts, the full issue list, AI kept/discarded counts, the sheet write result, and a `timings` object breaking the run down by stage.
+
+### Time budgets
+
+Every slow stage is capped, because on Vercel an overrunning function returns a 504 and you get nothing at all. A partial answer in forty seconds beats a perfect one that never arrives.
+
+| Stage | Cap |
+| --- | --- |
+| Link probing | 40 links, 12 at a time, 5s each, 22s total |
+| Image probing | 20 images, 8 at a time, 5s each, 12s total |
+| Copy-edit pass | 25s, then it reports as not run |
+| Whole function | `maxDuration = 90` |
+
+If the link budget runs out, `LINK-10` says how many were not reached, so a partial sweep is never mistaken for a clean one.
+
+Worst case measured: 40 links that all time out now finish in 20s. The old settings — 40 links, 6 at a time, HEAD then GET at 10s each — took 140s and produced the 504.
+
+`maxDuration = 90` needs a Vercel plan above Hobby, which caps at 10s. Typical run is 15–35 seconds.
 
 ```
 GET /api/baseline?limit=4
