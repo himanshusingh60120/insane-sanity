@@ -70,6 +70,17 @@ Checklist columns take only `Yes`, `No` or `Not run`. All the prose lives in **I
 
 Blog and press-release URLs get **B01–B07** and **P01–P06** from their own xlsx tabs instead of the research rows; the tool picks the column set from the URL path.
 
+### What is allowed to fail a page
+
+A check may only produce a failure — the thing that writes **No** into the sheet — when it maps to an item on the editorial checklist, or to the formatting standard that was explicitly asked for. Anything inferred from reading the site is an **observation**, not a defect: reported as a warning (visible, never flips a column) or as info (recorded in the JSON only).
+
+Two things that were wrongly failing pages in an earlier build, and are now observations:
+
+- **Internal links using two URL shapes** (`/cosmetics-market-448` alongside `/report/dietary-supplements-market-2870`). Both resolve. The checklist asks whether internal links *work*, and they do. Consolidating them would tidy up link equity, but that is your call, not a defect.
+- **Non-breaking spaces from a Word paste.** Untidy, not a spelling error.
+
+`LINK-00` now reports the plain answer to the checklist item instead: how many links were checked and how many responded.
+
 A row is **No** when at least one rule mapped to it failed. Warnings never flip a row to No — they surface in the tool and the Issue Log, so the sheet stays a clean pass/fail signal.
 
 Each row is reached one of three ways, shown in the tool:
