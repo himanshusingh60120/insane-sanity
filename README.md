@@ -89,6 +89,12 @@ Each row is reached one of three ways, shown in the tool:
 - **proxy signal** — the strongest machine-observable evidence for something a human judges more broadly. *Charts match text data* checks that both standard charts exist and that their alt text carries the market name and the forecast years; it cannot read the chart.
 - **AI, verified against source** — the three copy-editing rows
 
+### Casing: only shouting counts
+
+Title Case with capitalised minor words — "Key Companies **In The** U.S. Postbiotics Market" — is house style and passes. A heading is a casing defect only when the whole thing is shouting, which `CASE-01` catches, and it ignores acronyms like U.S., R&D and CAGR so it will not misfire on a correct heading that contains one. The same applies to Title Cased question headings.
+
+`docs/parsetest.mjs` asserts these stay silent, so the rules cannot creep back in.
+
 ### Section blueprints are deliberately soft
 
 Reports in the wild are not cleanly Template A or B. The cleaning-services report opens with Market Overview like a B, then carries Key Market Highlights and a Snapshot like an A, and titles its snapshot "*Market* Snapshot" rather than "*Report* Snapshot". Sections are therefore graded by evidence: only those observed on **every** peer report of that template can fail the page, everything else warns. Sections that live in the sidebar rail on some templates are searched for across the whole document.
@@ -109,13 +115,19 @@ Reports in the wild are not cleanly Template A or B. The cleaning-services repor
 
 **Whitespace is scanned per text segment, never across a tag boundary.** Flattened container text is useless here: two adjacent paragraphs concatenate, so a trailing `&nbsp;` in one plus inter-tag whitespace before the next reads as a double space that exists nowhere in the copy. Non-breaking spaces stay as U+00A0 through parsing for the same reason, and get their own warning (TECH-15) rather than being folded into TECH-06.
 
-### Fonts and sizes — what F16 does and does not cover
+### Fonts, sizes and mobile — what F16 covers
 
-Detected with certainty from the HTML: inline `font-size` / `font-family` / colour on body content, legacy `<font>` and `<center>` tags, and paste-artifact classes like `MsoNormal` or `c12`. Together these are the fingerprint of a paste from Word or Google Docs, and they are the reason a paragraph renders at the wrong size.
+**The size is checked against a value, not flagged for existing.** Set `BODY_FONT_SIZE` (default `12pt`). Units are normalised, so `12pt`, `16px` and `1rem` all count as the same size. If the page is 12pt and you want 12pt, that is a pass and it shows as an observation, not a finding. Only sizes that differ fail, and the finding names the size, the count and the first offending text.
 
-Not detected: the *computed* pixel size of a rendered paragraph. That needs a layout engine — Playwright or Puppeteer — which will not run in a Vercel serverless function without a custom Chromium layer. The reasoning behind accepting that gap: the stylesheet is shared by every report and is consistent by construction, so the per-report typography risk is almost entirely pasted-in styling, which is what F16 catches. TYPO-05 also prints the font families and size scale the stylesheet declares, so you can eyeball the intended scale.
+`BODY_FONT_FAMILY` works the same way: set it and any other family in body copy fails; leave it unset and the tool only warns when a page mixes more than one.
 
-If you do need true computed-style checks later, the clean route is a separate scheduled job on a container runtime rather than bolting a browser onto this endpoint.
+**Mobile font size is checked two ways, neither of which needs a browser:**
+
+- **TYPO-06** — the one that matters. An inline style beats a media query, always. If the stylesheet shrinks body text at a phone breakpoint *and* the copy carries an inline size, phone readers keep the desktop size. This fails, and it maps to M23.
+- **TYPO-07** — reads the font sizes declared inside media queries under 820px and reports the mobile scale. Warns if the stylesheet declares no mobile size at all.
+Both read the stylesheet the page already links, so neither costs an extra request.
+
+**Still not covered:** the *computed* pixel size of a rendered paragraph, which needs a layout engine. TYPO-06 covers the case where that would actually bite — an inline override defeating the responsive rule. If you later want true rendered measurement, the clean route is a scheduled job on a container runtime, not a browser bolted onto this endpoint.
 
 ---
 
