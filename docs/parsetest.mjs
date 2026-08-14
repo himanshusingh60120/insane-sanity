@@ -125,6 +125,11 @@ for (const i of issues) {
 }
 
 const fired = new Set(issues.map((i) => i.ruleId));
+
+// Observations must never reach the issue stream — they are not defects and a
+// QA tool that reports them as such is inventing work.
+const mustBeSilent = ['TECH-15', 'LINK-01'];
+const noisy = mustBeSilent.filter((r) => fired.has(r));
 const need = [
   ['CASE-01', 'ALL CAPS H3 in the source'],
   ['CASE-03', 'ALL CAPS table header cells'],
@@ -134,7 +139,6 @@ const need = [
   ['STRUCT-10', 'mixed bold segmentation bullets'],
   ['CASE-02', 'heading uppercased by CSS, not by content'],
   ['TECH-06', 'genuine double space inside one sentence'],
-  ['TECH-15', 'trailing non-breaking space from a Word paste'],
   ['TYPO-01', 'inline font-size / font-family on body copy'],
   ['TYPO-04', 'MsoNormal paste-artifact class'],
 ];
@@ -152,6 +156,10 @@ for (const i of tech06) console.log('   ', String(i.found).replace(/\n/g, ' | ')
 console.log('flags the paragraph boundary (must be false):', falsePositive);
 
 console.log('\n── Result ─────────────────────────────────────────────────');
+if (noisy.length) {
+  console.error('FAIL — these are observations and must not appear as findings:', noisy.join(', '));
+  process.exit(1);
+}
 if (falsePositive) {
   console.error('FAIL — TECH-06 still reads a paragraph boundary as a double space.');
   process.exit(1);
