@@ -14,9 +14,12 @@ Three checklist rows genuinely need a model — spelling, grammar and tone are n
 
 1. The model must return the **exact span** it is objecting to, copied character for character.
 2. Before a finding is shown or written anywhere, the server checks that span appears **verbatim** in the page source.
-3. Anything that fails that check is discarded and counted.
+3. The correction must be a **minimal edit** of the span it quotes. Replacing a 90-character clause with the single word "suppliers" is not a correction, it is a different sentence.
+4. A spelling finding must quote **a word, not a sentence** — quoting a whole clause is how a model smuggles an invented claim past a verbatim check, because the sentence is real even when the error is not.
+5. Any word the model names inside its own note must **actually appear in the quoted span**. A note reading *"the word 'cer' is a typo"* is thrown away when `cer` appears nowhere in the text.
+6. Anything failing any guard is discarded, counted, and the reason is shown in the run summary.
 
-A model that invents a sentence produces a quote that does not exist in the source, and the finding disappears before you ever see it. The run summary shows *"N findings kept, M discarded for not matching the page text verbatim"*, so drift is visible rather than silent.
+Guards 3–5 exist because guards 1–2 were not enough. An earlier build passed a finding that quoted a real sentence from a live page and then claimed a word inside it — a word that did not exist — was a typo. The quote verified, so it survived. Verifying that the span exists is not the same as verifying that the claim about it is true. The run summary shows *"N findings kept, M discarded for not matching the page text verbatim"*, so drift is visible rather than silent.
 
 With no `OPENAI_API_KEY` set, those three rows read **Not run** rather than guessing, and everything else works unchanged.
 
@@ -59,11 +62,11 @@ Checklist columns take only `Yes`, `No` or `Not run`. All the prose lives in **I
 
 ## What gets checked
 
-63 checklist rows on a report page, drawn from three sources.
+66 checklist rows on a report page, drawn from three sources.
 
 **M01–M25** — every row from the *Master Checklist* tab of `editorial_master_checklist.xlsx`.
 **R26–R33** — every row from the *Research Report* tab.
-**F01–F15** — the house formatting standard, derived from the four-report diff. This is the block that catches the "reads fine, looks fine, is inconsistent" class of miss.
+**F01–F16** — the house formatting standard, derived from the four-report diff. This is the block that catches the "reads fine, looks fine, is inconsistent" class of miss.
 
 Blog and press-release URLs get **B01–B07** and **P01–P06** from their own xlsx tabs instead of the research rows; the tool picks the column set from the URL path.
 
@@ -74,6 +77,12 @@ Each row is reached one of three ways, shown in the tool:
 - **rule** — a deterministic check decides it outright
 - **proxy signal** — the strongest machine-observable evidence for something a human judges more broadly. *Charts match text data* checks that both standard charts exist and that their alt text carries the market name and the forecast years; it cannot read the chart.
 - **AI, verified against source** — the three copy-editing rows
+
+### Section blueprints are deliberately soft
+
+Reports in the wild are not cleanly Template A or B. The cleaning-services report opens with Market Overview like a B, then carries Key Market Highlights and a Snapshot like an A, and titles its snapshot "*Market* Snapshot" rather than "*Report* Snapshot". Sections are therefore graded by evidence: only those observed on **every** peer report of that template can fail the page, everything else warns. Sections that live in the sidebar rail on some templates are searched for across the whole document.
+
+`BASE-01`, which compares against the reports actually published alongside this one, is meant to carry the real weight here — it is evidence-based rather than hard-coded, and it updates itself as house style moves.
 
 ### The checks worth knowing about
 
@@ -86,6 +95,16 @@ Each row is reached one of three ways, shown in the tool:
 **Links are actually requested.** Up to 45 per page, 6 at a time, HEAD with a ranged-GET fallback for servers that reject HEAD.
 
 **The Buy Now link is checked against the report id in the slug.** A mismatch means the button sells the wrong report.
+
+**Whitespace is scanned per text segment, never across a tag boundary.** Flattened container text is useless here: two adjacent paragraphs concatenate, so a trailing `&nbsp;` in one plus inter-tag whitespace before the next reads as a double space that exists nowhere in the copy. Non-breaking spaces stay as U+00A0 through parsing for the same reason, and get their own warning (TECH-15) rather than being folded into TECH-06.
+
+### Fonts and sizes — what F16 does and does not cover
+
+Detected with certainty from the HTML: inline `font-size` / `font-family` / colour on body content, legacy `<font>` and `<center>` tags, and paste-artifact classes like `MsoNormal` or `c12`. Together these are the fingerprint of a paste from Word or Google Docs, and they are the reason a paragraph renders at the wrong size.
+
+Not detected: the *computed* pixel size of a rendered paragraph. That needs a layout engine — Playwright or Puppeteer — which will not run in a Vercel serverless function without a custom Chromium layer. The reasoning behind accepting that gap: the stylesheet is shared by every report and is consistent by construction, so the per-report typography risk is almost entirely pasted-in styling, which is what F16 catches. TYPO-05 also prints the font families and size scale the stylesheet declares, so you can eyeball the intended scale.
+
+If you do need true computed-style checks later, the clean route is a separate scheduled job on a container runtime rather than bolting a browser onto this endpoint.
 
 ---
 
@@ -139,7 +158,10 @@ Both run offline with no network and no API keys.
 ```bash
 node docs/selftest.mjs    # rules against a stub built from real 3124 content
 node docs/parsetest.mjs   # cheerio parser + rules against a synthetic page
+node docs/aitest.mjs      # the AI verification guards, no API key needed
 ```
+
+`aitest.mjs` feeds fabricated model output straight through the verification layer, including the real hallucination that got through an earlier build. It needs no API key.
 
 `selftest.mjs` asserts in both directions: eight rules must fire on known defects, and three must stay silent on correct content. A checker that cries wolf gets switched off, so the false-positive guards are tested as explicitly as the detections.
 
